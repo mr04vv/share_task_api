@@ -17,7 +17,8 @@ object GroupMemberTable : Table("group_members") {
 
 data class GroupMember(
         var id: Int? = 0,
-        var name: String = ""
+        var name: String = "",
+        var nick_nake: String = ""
 )
 
 data class Group(
