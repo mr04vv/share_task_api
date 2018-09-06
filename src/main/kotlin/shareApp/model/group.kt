@@ -25,13 +25,17 @@ data class Group(
         var name: String? = null
 )
 
-fun addGroup(group: Group): Group {
+fun addGroup(group: Group): Group? {
 
-    transaction {
-        group.id = GroupTable.insert {
-            it[GroupTable.name] = group.name
-        } get GroupTable.id
+    return try {
+        transaction {
+            group.id = GroupTable.insert {
+                it[GroupTable.name] = group.name
+            } get GroupTable.id
+        }
+        group
+    } catch (e: Exception) {
+        null
     }
-    if (group.id == 0) throw halt(400, "can't create group")
-    return group
+
 }

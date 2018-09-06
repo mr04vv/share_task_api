@@ -1,6 +1,5 @@
 package shareApp.model
 
-import spark.Spark.*
 import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.transactions.*
 import org.joda.time.DateTime
@@ -44,25 +43,27 @@ data class TaskList(
 )
 
 // idからtask取得
-fun getTask(id: Int): Task {
+fun getTask(id: Int): Task? {
 
     lateinit var task: Task
-    transaction {
-        TaskTable.select {
-            TaskTable.id.eq(id)
-        }.orderBy(TaskTable.limit_date).forEach {
-                    task = Task(it[TaskTable.id], it[TaskTable.title]
-                            , it[TaskTable.group_id], it[TaskTable.user_id], it[TaskTable.done],
-                            DeadLine(it[TaskTable.d_year], it[TaskTable.d_month], it[TaskTable.d_day]), it[TaskTable.limit_date])
-                }
+    return try {
+        transaction {
+            TaskTable.select {
+                TaskTable.id.eq(id)
+            }.orderBy(TaskTable.limit_date).forEach {
+                task = Task(it[TaskTable.id], it[TaskTable.title]
+                        , it[TaskTable.group_id], it[TaskTable.user_id], it[TaskTable.done],
+                        DeadLine(it[TaskTable.d_year], it[TaskTable.d_month], it[TaskTable.d_day]), it[TaskTable.limit_date])
+            }
+        }
+        task
+    } catch (e: Exception) {
+        null
     }
-    if (task.id == 0) throw halt(404, "is not exist") // 存在しないId指定された時
-    // res task
-    return task
 }
 
 // groupのtaskList取得
-fun getTaskListByGroupId(group_id: Int): TaskList {
+fun getTaskListByGroupId(group_id: Int): TaskList? {
 
     lateinit var task: Task
     val list: MutableList<Task> = mutableListOf()
@@ -70,81 +71,123 @@ fun getTaskListByGroupId(group_id: Int): TaskList {
 //    lateinit var main: Tasks
 
     // groupIdが一致するタスクを取得→リストに格納
-    transaction {
-        TaskTable.select {
-            TaskTable.group_id.eq(group_id)
-        }.orderBy(TaskTable.limit_date).forEach {
-                    task = Task(it[TaskTable.id], it[TaskTable.title],
-                            it[TaskTable.group_id], it[TaskTable.user_id], it[TaskTable.done],
-                            DeadLine(it[TaskTable.d_year], it[TaskTable.d_month], it[TaskTable.d_day]), it[TaskTable.limit_date])
-                    list += task
-                    tasks = TaskList(list)
-                }
+    return try {
+        transaction {
+            TaskTable.select {
+                TaskTable.group_id.eq(group_id)
+            }.orderBy(TaskTable.limit_date).forEach {
+                task = Task(it[TaskTable.id], it[TaskTable.title],
+                        it[TaskTable.group_id], it[TaskTable.user_id], it[TaskTable.done],
+                        DeadLine(it[TaskTable.d_year], it[TaskTable.d_month], it[TaskTable.d_day]), it[TaskTable.limit_date])
+                list += task
+                tasks = TaskList(list)
+            }
+        }
+        tasks
+    } catch (e: Exception) {
+        null
     }
-    return tasks
 }
 
 // userIdからtaskList取得
-fun getTaskListByUserId(user_id: Int): TaskList {
+fun getTaskListByUserId(user_id: Int): TaskList? {
 
     lateinit var task: Task
     val list: MutableList<Task> = mutableListOf()
     var tasks = TaskList()
-    transaction {
-        TaskTable.select {
-            TaskTable.user_id.eq(user_id)
-        }.orderBy(TaskTable.limit_date).forEach {
-                    task = Task(it[TaskTable.id], it[TaskTable.title],
-                            it[TaskTable.group_id], it[TaskTable.user_id], it[TaskTable.done],
-                            DeadLine(it[TaskTable.d_year], it[TaskTable.d_month], it[TaskTable.d_day]), it[TaskTable.limit_date])
-                    list += task
-                    tasks = TaskList(list)
-                }
+
+    return try {
+        transaction {
+            TaskTable.select {
+                TaskTable.user_id.eq(user_id)
+            }.orderBy(TaskTable.limit_date).forEach {
+                task = Task(it[TaskTable.id], it[TaskTable.title],
+                        it[TaskTable.group_id], it[TaskTable.user_id], it[TaskTable.done],
+                        DeadLine(it[TaskTable.d_year], it[TaskTable.d_month], it[TaskTable.d_day]), it[TaskTable.limit_date])
+                list += task
+                tasks = TaskList(list)
+            }
+        }
+        tasks
+    } catch (e: Exception) {
+        null
     }
-    return tasks
 }
 
 // 全タスク取得（このメソッドいる？）
-fun getAllTasks(): TaskList {
+fun getAllTasks(): TaskList? {
 
     lateinit var task: Task
     val list: MutableList<Task> = mutableListOf()
     var tasks = TaskList()
-    transaction {
-        TaskTable.selectAll()
-        .orderBy(TaskTable.limit_date).forEach {
-            task = Task(it[TaskTable.id], it[TaskTable.title],
-                    it[TaskTable.group_id], it[TaskTable.user_id], it[TaskTable.done],
-                    DeadLine(it[TaskTable.d_year], it[TaskTable.d_month], it[TaskTable.d_day]), it[TaskTable.limit_date])
-            list += task
-            tasks = TaskList(list)
+
+    return try {
+        transaction {
+            TaskTable.selectAll()
+                    .orderBy(TaskTable.limit_date).forEach {
+                        task = Task(it[TaskTable.id], it[TaskTable.title],
+                                it[TaskTable.group_id], it[TaskTable.user_id], it[TaskTable.done],
+                                DeadLine(it[TaskTable.d_year], it[TaskTable.d_month], it[TaskTable.d_day]), it[TaskTable.limit_date])
+                        list += task
+                        tasks = TaskList(list)
+                    }
+
         }
+        tasks
+    } catch (e: Exception) {
+        null
     }
-    return tasks
 }
 
 // task追加
-fun addTask(task: Task): Task {
+fun addTask(task: Task, userId: Int): Task? {
 
     val cal = Calendar.getInstance()
 
     // datetimeのフォーマット
-    cal.set(Calendar.MONTH, task.dead.month!!-1)
+    cal.set(Calendar.MONTH, task.dead.month!! - 1)
     cal.set(Calendar.YEAR, task.dead.year!!)
     cal.set(Calendar.DAY_OF_MONTH, task.dead.day!!)
     task.limit_date = DateTime(cal)
-
-    transaction {
-        task.id = TaskTable.insert {
-            it[title] = task.title
-            it[group_id] = task.group_id
-            it[user_id] = task.user_id
-            it[done] = task.done
-            it[d_year] = task.dead.year
-            it[d_month] = task.dead.month
-            it[d_day] = task.dead.day
-            it[limit_date] = DateTime(cal)
-        } get TaskTable.id
+    return try {
+        transaction {
+            task.id = TaskTable.insert {
+                it[title] = task.title
+                it[group_id] = task.group_id
+                it[user_id] = userId
+                it[done] = task.done
+                it[d_year] = task.dead.year
+                it[d_month] = task.dead.month
+                it[d_day] = task.dead.day
+                it[limit_date] = DateTime(cal)
+            } get TaskTable.id
+        }
+        task
+    } catch (e: Exception) {
+        return null
     }
-    return task
+
+}
+
+//task削除
+fun deleteTask(userId: Int, taskId: Int): Boolean {
+
+    val task = getTask(taskId)
+
+    task?.let {
+        if (userId != task.user_id) {
+            return false
+        } } ?: return false
+
+
+    return try {
+        transaction {
+            TaskTable.deleteWhere {
+                TaskTable.id.eq(task.id!!)
+            }
+        }
+        true
+    } catch (e: Exception) {
+        false
+    }
 }

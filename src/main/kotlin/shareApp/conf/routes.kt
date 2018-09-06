@@ -34,6 +34,7 @@ class Routes {
             get("/user", TaskController().getTaskListByUserId(), toJson)
             get("/all", TaskController().getAllTask(), toJson)
             post("", TaskController().addTask(), toJson)
+            delete("/delete", TaskController().deleteTask(), toJson)
         }
 
         options("/*"
