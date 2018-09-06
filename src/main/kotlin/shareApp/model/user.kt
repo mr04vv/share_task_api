@@ -8,26 +8,28 @@ import org.jetbrains.exposed.sql.transactions.*
 object UserTable : Table("users") {
     val id = integer("id").autoIncrement().primaryKey()
     val name = varchar("name", 50).uniqueIndex()
+    val nick_name = varchar("nick_name", 50)
     val password = varchar("password", 100)
 }
 
 data class User(
         var id: Int = 0,
         var name: String = "",
-        var password: String = "",
-        var add_task_flg: Boolean = false
+        var nick_name: String = "",
+        var password: String = ""
 )
 
 data class ResponseUserData(
         var id: Int = 0,
         var name: String = "",
-        var group: MutableList<Group>? = null,
-        var add_task_flg: Boolean = false
+        var nick_name: String = "",
+        var group: MutableList<Group>? = null
 )
 
 data class ResponseUserDataWithToken(
         var id: Int = 0,
         var name: String = "",
+        var nick_name: String = "",
         var group: MutableList<Group>? = null,
         var token: String? = null
 )
@@ -45,6 +47,7 @@ fun login(u: User): ResponseUserDataWithToken? {
                 UserTable.name.eq(u.name) and UserTable.password.eq(u.password)
             }.forEach {
                 u.id = it[UserTable.id]
+                u.nick_name = it[UserTable.nick_name]
                 /* u.group_id = it[UserTable.group_id] */
             }
         }
@@ -54,7 +57,7 @@ fun login(u: User): ResponseUserDataWithToken? {
         // userが属しているグループ参照
         val groups = getGroups(findUserIdByToken(token))
 
-        ResponseUserDataWithToken(u.id, u.name, groups, token)
+        ResponseUserDataWithToken(u.id, u.name, u.nick_name, groups, token)
     } catch (e: Exception) {
         null
     }
@@ -72,6 +75,7 @@ fun addUser(u: User): ResponseUserData? {
             try {
                 u.id = UserTable.insert {
                     it[name] = u.name
+                    it[nick_name] = u.nick_name
                     it[password] = u.password
                 } get UserTable.id
             } catch (e: Exception) {
@@ -79,7 +83,7 @@ fun addUser(u: User): ResponseUserData? {
                 throw halt(400, "this name is already exist") //大概ユーザー名被り
             }
         }
-        ResponseUserData(u.id, u.name, null)
+        ResponseUserData(u.id, u.name, u.nick_name, null)
     } catch (e: Exception) {
         null
     }
@@ -97,7 +101,7 @@ fun getUser(id: Int): ResponseUserData? {
             UserTable.select {
                 UserTable.id.eq(id)
             }.forEach {
-                user = User(it[UserTable.id], it[UserTable.name]
+                user = User(it[UserTable.id], it[UserTable.name], it[UserTable.nick_name]
                         , it[UserTable.password])
             }
 
@@ -113,7 +117,7 @@ fun getUser(id: Int): ResponseUserData? {
                     }
         }
 
-        ResponseUserData(user.id, user.name, group_id)
+        ResponseUserData(user.id, user.name, user.nick_name, group_id)
     } catch (e: Exception) {
         null
     }
@@ -127,10 +131,10 @@ fun getUserList(group: Int): MutableList<GroupMember>? {
     // groupIdからgroup参照してuserTableにjoin→groupMemberのname,id取得
     return try {
         transaction {
-            (GroupMemberTable innerJoin UserTable).slice(UserTable.id, UserTable.name).select {
+            (GroupMemberTable innerJoin UserTable).slice(UserTable.id, UserTable.name, UserTable.nick_name).select {
                 GroupMemberTable.group_id.eq(group)
             }.forEach {
-                user = GroupMember(it[UserTable.id], it[UserTable.name])
+                user = GroupMember(it[UserTable.id], it[UserTable.name], it[UserTable.nick_name])
                 users += user
             }
         }
