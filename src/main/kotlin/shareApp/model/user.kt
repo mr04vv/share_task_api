@@ -34,114 +34,128 @@ data class ResponseUserDataWithToken(
 
 
 // loginメソッド
-fun login(u: User): ResponseUserDataWithToken {
+fun login(u: User): ResponseUserDataWithToken? {
 
     u.password = hashString("SHA-256", u.password)
 
     // userテーブルからselect
-    transaction {
-        UserTable.select {
-            UserTable.name.eq(u.name) and UserTable.password.eq(u.password)
-        }.forEach {
-                    u.id = it[UserTable.id]
-                    /* u.group_id = it[UserTable.group_id] */
-                }
+    return try {
+        transaction {
+            UserTable.select {
+                UserTable.name.eq(u.name) and UserTable.password.eq(u.password)
+            }.forEach {
+                u.id = it[UserTable.id]
+                /* u.group_id = it[UserTable.group_id] */
+            }
+        }
+
+        // token生成
+        val token = createToken(u.id)
+        // userが属しているグループ参照
+        val groups = getGroups(findUserIdByToken(token))
+
+        ResponseUserDataWithToken(u.id, u.name, groups, token)
+    } catch (e: Exception) {
+        null
     }
-    // name or passが違う時404
-    if (u.id == 0) throw halt(404, "wrong name or pass")
-
-    // token生成
-    val token = createToken(u.id)
-    // userが属しているグループ参照
-    val groups = getGroups(findUserIdByToken(token))
-
-    // res
-    return ResponseUserDataWithToken(u.id, u.name, groups, token)
 }
 
 // createUserメソッド
-fun addUser(u: User): ResponseUserData {
+fun addUser(u: User): ResponseUserData? {
 
     // passのハッシュ化
     u.password = hashString("SHA-256", u.password)
 
     // insert
-    transaction {
-        try {
-            u.id = UserTable.insert {
-                it[name] = u.name
-                it[password] = u.password
-            } get UserTable.id
-        } catch (e: Exception) {
-            // nameの被りで400
-            throw halt(400, "this name is already exist") //大概ユーザー名被り
+    return try {
+        transaction {
+            try {
+                u.id = UserTable.insert {
+                    it[name] = u.name
+                    it[password] = u.password
+                } get UserTable.id
+            } catch (e: Exception) {
+                // nameの被りで400
+                throw halt(400, "this name is already exist") //大概ユーザー名被り
+            }
         }
+        ResponseUserData(u.id, u.name, null)
+    } catch (e: Exception) {
+        null
     }
-    // res
-    return ResponseUserData(u.id, u.name, null)
 }
 
 // getUserInfo
-fun getUser(id: Int): ResponseUserData {
+fun getUser(id: Int): ResponseUserData? {
     var group: Group
     val group_id: MutableList<Group> = mutableListOf()
     lateinit var user: User
 
     // userIdからuserInfo取得
-    transaction {
-        UserTable.select {
-            UserTable.id.eq(id)
-        }.forEach {
-            user = User(it[UserTable.id], it[UserTable.name]
-                            , it[UserTable.password])
+    return try {
+        transaction {
+            UserTable.select {
+                UserTable.id.eq(id)
+            }.forEach {
+                user = User(it[UserTable.id], it[UserTable.name]
+                        , it[UserTable.password])
+            }
+
+
+            // getGroupじゃだめなのか？要調査 TODO
+            (GroupMemberTable innerJoin GroupTable)
+                    .slice(GroupMemberTable.group_id, GroupTable.name)
+                    .select {
+                        GroupMemberTable.user_id.eq(user.id)
+                    }.forEach {
+                        group = Group(it[GroupMemberTable.group_id], it[GroupTable.name])
+                        group_id += group
+                    }
         }
 
-        if (user == null) throw halt(404, "is not exist")
-//      ここでエラー処理　書き直す TODO
-
-        // getGroupじゃだめなのか？要調査 TODO
-        (GroupMemberTable innerJoin GroupTable)
-                .slice(GroupMemberTable.group_id, GroupTable.name)
-                .select {
-                    GroupMemberTable.user_id.eq(user.id)
-                }.forEach {
-            group = Group(it[GroupMemberTable.group_id], it[GroupTable.name])
-            group_id += group
-        }
+        ResponseUserData(user.id, user.name, group_id)
+    } catch (e: Exception) {
+        null
     }
-    // res
-    return ResponseUserData(user.id, user.name, group_id)
 }
 
 // userList取得
-fun getUserList(group: Int): MutableList<GroupMember> {
+fun getUserList(group: Int): MutableList<GroupMember>? {
     var user: GroupMember
     val users: MutableList<GroupMember> = mutableListOf() // groupMemberのリスト
 
     // groupIdからgroup参照してuserTableにjoin→groupMemberのname,id取得
-    transaction {
-        (GroupMemberTable innerJoin UserTable).slice(UserTable.id, UserTable.name).select {
-            GroupMemberTable.group_id.eq(group)
-        }.forEach {
-            user = GroupMember(it[UserTable.id], it[UserTable.name])
-            users += user
+    return try {
+        transaction {
+            (GroupMemberTable innerJoin UserTable).slice(UserTable.id, UserTable.name).select {
+                GroupMemberTable.group_id.eq(group)
+            }.forEach {
+                user = GroupMember(it[UserTable.id], it[UserTable.name])
+                users += user
+            }
         }
+        users
+    } catch (e: Exception) {
+        null
     }
-    return users
 }
 
 // groupリスト取得
-fun getGroups(userId: Int): MutableList<Group> {
+fun getGroups(userId: Int): MutableList<Group>? {
 
     val groups: MutableList<Group> = mutableListOf()
 
     // userIdから所属グループを取得
-    transaction {
-        (GroupMemberTable innerJoin GroupTable).slice(GroupTable.id, GroupTable.name).select {
-            GroupMemberTable.user_id.eq(userId)
-        }.forEach {
-                    groups += Group(it[GroupTable.id], it[GroupTable.name])
-                }
+    return try {
+        transaction {
+            (GroupMemberTable innerJoin GroupTable).slice(GroupTable.id, GroupTable.name).select {
+                GroupMemberTable.user_id.eq(userId)
+            }.forEach {
+                groups += Group(it[GroupTable.id], it[GroupTable.name])
+            }
+        }
+        groups
+    } catch (e: Exception) {
+        null
     }
-    return groups
 }
